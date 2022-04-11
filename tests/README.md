@@ -7,12 +7,10 @@ We write a unit test for every function. Per pytest convention, the test should 
 From the repo root:
 
 ```
-python3 setup.py pytest --addopts "-n 4 --cov-report html --cov=operator_pvc_manager tests/"
+PYTHONPATH=. pytest --cov=operator_pvc_manager --cov-report html tests/
 ```
 
-Pytest runs tests in parallel so we really have to avoid any side effects in our functions, hence the mocking.
-
-HTML coverage report shows up in 'htmlcov/'.
+HTML coverage report shows up in 'htmlcov/', you can see exactly which lines are covered.
 
 ## How the fixtures work
 
@@ -63,3 +61,7 @@ We can insert our mocked API object into the imported module, because a module i
 ```
 
 The fixtures create the fake objects, which we side-load as needed during the unit tests.
+
+### Avoiding side effects
+
+When we mock functions or objects within the module, those mocks would normally carry over to other tests. To avoid these, use the `operator_pvc_manager` fixture that imports the module, yields to the test, then reloads when it's done to wipe out any mocks.

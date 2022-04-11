@@ -2,16 +2,15 @@ import logging
 import pytest
 import re
 from datetime import timedelta
-from operator_pvc_manager import operator_pvc_manager
-from unittest import mock
+from unittest.mock import patch, MagicMock
 
 
-def test_delete_if_needed(v1, appsv1, logger, pvc, sts):
+def test_delete_if_needed(operator_pvc_manager, v1, appsv1, pvc):
   operator_pvc_manager.v1 = v1
   operator_pvc_manager.appsv1 = appsv1
-  operator_pvc_manager.get_sts_for_pvc = mock.MagicMock()
-  operator_pvc_manager.pvc_unmounted_long_enough = mock.MagicMock()
-  sts_0_replicas = mock.MagicMock()
+  operator_pvc_manager.get_sts_for_pvc = MagicMock()
+  operator_pvc_manager.pvc_unmounted_long_enough = MagicMock()
+  sts_0_replicas = MagicMock()
   sts_0_replicas.spec.replicas = 0
 
   # recently deleted sts should not delete
@@ -38,7 +37,7 @@ def test_delete_if_needed(v1, appsv1, logger, pvc, sts):
   assert operator_pvc_manager.delete_if_needed(pvc) == True
   assert operator_pvc_manager.v1.delete_namespaced_persistent_volume_claim.call_count == 2
 
-def test_resize_if_needed(v1, appsv1, logger, pvc):
+def test_resize_if_needed(operator_pvc_manager, v1, appsv1, pvc):
   operator_pvc_manager.v1 = v1
   operator_pvc_manager.appsv1 = appsv1
 
@@ -47,7 +46,7 @@ def test_resize_if_needed(v1, appsv1, logger, pvc):
   assert operator_pvc_manager.resize_if_needed(pvc) == False
 
   # unspecified units should return false
-  operator_pvc_manager.get_pvc_desired_size = mock.MagicMock()
+  operator_pvc_manager.get_pvc_desired_size = MagicMock()
   operator_pvc_manager.get_pvc_desired_size.return_value = '12345'
   assert operator_pvc_manager.resize_if_needed(pvc) == False
 
@@ -67,13 +66,13 @@ def test_resize_if_needed(v1, appsv1, logger, pvc):
   assert operator_pvc_manager.resize_if_needed(pvc) == True
   operator_pvc_manager.v1.patch_namespaced_persistent_volume_claim.assert_called_once()
 
-def test_get_sts_for_pvc(appsv1, pvc):
+def test_get_sts_for_pvc(operator_pvc_manager, appsv1, pvc):
   operator_pvc_manager.appsv1 = appsv1
   sts = operator_pvc_manager.get_sts_for_pvc(pvc)
   assert sts.metadata.name == 'some-sts'
 
-def test_get_ordinal(logger):
-  fake_object = mock.MagicMock()
+def test_get_ordinal(operator_pvc_manager):
+  fake_object = MagicMock()
   fake_object.metadata.name = 'my-sts-pod-5'
   ordinal = operator_pvc_manager.get_ordinal(fake_object)
   assert ordinal == 5
@@ -83,7 +82,7 @@ def test_get_ordinal(logger):
     operator_pvc_manager.get_ordinal(fake_object)
   assert excinfo.typename == 'RuntimeWarning'
 
-def test_get_pvc_desired_size(sts):
+def test_get_pvc_desired_size(operator_pvc_manager, sts):
   # it should pull the size from the object, with correct format
   size = operator_pvc_manager.get_pvc_desired_size(sts)
   assert re.match('^[0-9]+Gi$', size)
@@ -94,7 +93,7 @@ def test_get_pvc_desired_size(sts):
     operator_pvc_manager.get_pvc_desired_size(sts)
   assert excinfo.typename == 'RuntimeWarning'
 
-def test_pvc_unmounted_long_enough(logger, v1, cloudtrail, pvc):
+def test_pvc_unmounted_long_enough(operator_pvc_manager, v1, cloudtrail, pvc):
   operator_pvc_manager.pvc_grace_minutes = timedelta(seconds=1)
   operator_pvc_manager.cloudtrail = cloudtrail
   operator_pvc_manager.v1 = v1
@@ -112,7 +111,7 @@ def test_pvc_unmounted_long_enough(logger, v1, cloudtrail, pvc):
   long_enough = operator_pvc_manager.pvc_unmounted_long_enough(pvc)
   assert long_enough == False
 
-def test_ready_check(tmpdir, cloudtrail, v1, appsv1):
+def test_ready_check(operator_pvc_manager, tmpdir, cloudtrail, v1, appsv1):
   operator_pvc_manager.cloudtrail = cloudtrail
   operator_pvc_manager.v1 = v1
   operator_pvc_manager.appsv1 = appsv1
@@ -121,12 +120,8 @@ def test_ready_check(tmpdir, cloudtrail, v1, appsv1):
   with open(check_file) as f:
     assert f.readlines() == ['ready\n']
 
-def test_health_check(tmpdir):
+def test_health_check(operator_pvc_manager, tmpdir):
   check_file=f"{tmpdir}/heartbeat"
   operator_pvc_manager.health_check(check_file=check_file)
   with open(check_file) as f:
     assert f.readlines() == ['running\n']
-
-@pytest.fixture()
-def logger():
-  operator_pvc_manager.logger = logging.getLogger(__name__)

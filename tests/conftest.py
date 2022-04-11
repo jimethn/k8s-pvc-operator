@@ -1,9 +1,19 @@
+import logging
 import pytest
-from datetime import datetime, timedelta
-from dateutil.tz import tzlocal, tzutc
+from datetime import datetime
+from dateutil.tz import tzlocal
+from importlib import reload
 from random import randint
 from unittest import mock
 
+
+@pytest.fixture()
+def operator_pvc_manager():
+  # this fixture is so mocks don't persist between tests
+  from operator_pvc_manager import operator_pvc_manager
+  operator_pvc_manager.logger = logging.getLogger(__name__)
+  yield operator_pvc_manager
+  reload(operator_pvc_manager)
 
 @pytest.fixture()
 def appsv1(sts):
