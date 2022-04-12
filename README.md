@@ -9,7 +9,6 @@ Responsibilities:
 Requirements:
 
 - AWS cloud
-- gp2 volumes
 
 ## How to use:
 

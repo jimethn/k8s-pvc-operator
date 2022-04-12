@@ -2,7 +2,7 @@ import logging
 import pytest
 import re
 from datetime import timedelta
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 
 def test_delete_if_needed(operator_pvc_manager, v1, appsv1, pvc):
@@ -110,6 +110,30 @@ def test_pvc_unmounted_long_enough(operator_pvc_manager, v1, cloudtrail, pvc):
   operator_pvc_manager.cloudtrail.detatch_first()
   long_enough = operator_pvc_manager.pvc_unmounted_long_enough(pvc)
   assert long_enough == False
+
+def test_get_volume_id(operator_pvc_manager):
+  v1 = MagicMock()
+  operator_pvc_manager.v1 = v1
+  # test gp2 spec
+  gp2 = MagicMock()
+  gp2.items[0].spec.aws_elastic_block_store.volume_id = 'aws://us-east-1c/vol-0a6d7a39a07212c42'
+  gp2.items[0].spec.csi = None
+  v1.list_persistent_volume.return_value = gp2
+  assert operator_pvc_manager.get_volume_id('some-pv') == 'vol-0a6d7a39a07212c42'
+  # test gp3 spec
+  gp3 = MagicMock()
+  gp3.items[0].spec.csi.volume_handle = 'vol-0a6d7a39a07212c42'
+  gp3.items[0].spec.aws_elastic_block_store = None
+  v1.list_persistent_volume.return_value = gp3
+  assert operator_pvc_manager.get_volume_id('some-pv') == 'vol-0a6d7a39a07212c42'
+  # test missing volume
+  novol = MagicMock()
+  novol.items[0].spec.csi = None
+  novol.items[0].spec.aws_elastic_block_store = None
+  v1.list_persistent_volume.return_value = novol
+  with pytest.raises(RuntimeError) as excinfo:
+    operator_pvc_manager.get_volume_id('some-pv')
+  assert excinfo.typename == 'RuntimeError'
 
 def test_ready_check(operator_pvc_manager, tmpdir, cloudtrail, v1, appsv1):
   operator_pvc_manager.cloudtrail = cloudtrail

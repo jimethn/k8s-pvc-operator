@@ -203,9 +203,7 @@ def pvc_unmounted_long_enough(pvc):
     """
     logger.debug(f"pvc_unmounted_long_enough {pvc.metadata.namespace}.{pvc.metadata.name}")
     # Find the EBS volume ID from kube
-    pv_name = pvc.spec.volume_name
-    pv = v1.list_persistent_volume(field_selector=f'metadata.name={pv_name}')
-    ebs_volume = pv.items[0].spec.aws_elastic_block_store.volume_id.split('/')[-1]  # formatted like 'aws://us-east-1c/vol-0a6d7a39a07212c42'
+    ebs_volume = get_volume_id(pvc.spec.volume_name)
 
     # Look through CloudTrail events for that volume. This API is rate limited to 2 TPS.
     events = cloudtrail.lookup_events(
@@ -242,6 +240,25 @@ def pvc_unmounted_long_enough(pvc):
     # that's a _lot_ of tagging...
     logger.warning(f"Didn't find any attach or detatch events for PVC {pvc.metadata.namespace}.{pvc.metadata.name}")
     return False
+
+def get_volume_id(pv_name):
+    """Return the AWS EBS volume ID backing a PersistentVolume. Supports gp2
+    and gp3 volumes.
+
+    Throws a RuntimeError if it can't find the volume ID.
+    """
+    logger.debug(f"get_volume_id {pv_name}")
+    pv = v1.list_persistent_volume(field_selector=f'metadata.name={pv_name}')
+    if pv.items[0].spec.aws_elastic_block_store:
+        # gp2 location
+        ebs_volume = pv.items[0].spec.aws_elastic_block_store.volume_id.split('/')[-1]  # formatted like 'aws://us-east-1c/vol-0a6d7a39a07212c42'
+    elif pv.items[0].spec.csi:
+        # gp3 location
+        ebs_volume = pv.items[0].spec.csi.volume_handle  # formatted like 'vol-0a6d7a39a07212c42'
+    else:
+        logger.error(f"get_volume_id couldn't find the volume ID for PV {pv_name}")
+        raise RuntimeError("get_volume_id couldn't find the volume ID")
+    return ebs_volume
 
 def ready_check(check_file='/tmp/heartbeat'):
     """Verifies dependencies and writes out /tmp/heartbeat."""
